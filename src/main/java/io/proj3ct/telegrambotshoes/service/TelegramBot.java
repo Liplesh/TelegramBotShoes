@@ -361,5 +361,4 @@ public class TelegramBot extends TelegramLongPollingBot {
     private void getGetShoesbyPrice(long chatId, String textToSend){
 
     }
-    //тест
 }
