@@ -1,0 +1,11 @@
+bot.name=
+bot.token=
+
+
+#db related settings
+spring.jpa.properties.hibernate.dialect=
+spring.jpa.hibernate.ddl-auto=update
+spring.datasource.url=
+spring.datasource.username=
+spring.datasource.password=
+spring.jpa.show-sql=true
