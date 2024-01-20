@@ -1,7 +1,9 @@
 package io.proj3ct.telegrambotshoes.service;
 
 import io.proj3ct.telegrambotshoes.config.BotConfig;
+import io.proj3ct.telegrambotshoes.model.Shoes;
 import io.proj3ct.telegrambotshoes.model.User;
+import io.proj3ct.telegrambotshoes.repositories.ShoesRepository;
 import io.proj3ct.telegrambotshoes.repositories.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,6 +11,8 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
@@ -25,6 +29,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     @Autowired
     private UserRepository userRepository;
+    private ShoesRepository shoesRepository;
     final BotConfig botConfig;
 
     static final String HELP_TEXT = "Вас приветствует лучший продавец кроссовок в России Прокофий Ласкин.\n\n" +
@@ -48,7 +53,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 
     @Autowired
-    public TelegramBot(BotConfig botConfig){
+    public TelegramBot(BotConfig botConfig) {
         this.botConfig = botConfig;
 
         List<BotCommand> listOfCommands = new ArrayList<>();
@@ -63,7 +68,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         try {
             this.execute(new SetMyCommands(listOfCommands, new BotCommandScopeDefault(), null));
-        } catch (TelegramApiException e){
+        } catch (TelegramApiException e) {
             log.error("Ошибка листа комманд: " + e.getMessage());
         }
     }
@@ -77,15 +82,16 @@ public class TelegramBot extends TelegramLongPollingBot {
     public String getBotToken() {
         return botConfig.getToken();
     }
+
     @Override
     public void onUpdateReceived(Update update) {
 
-        if (update.hasMessage() && update.getMessage().hasText()){
+        if (update.hasMessage() && update.getMessage().hasText()) {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
 
 
-            switch (messageText){
+            switch (messageText) {
                 case "/start":
                     registerUser(update.getMessage());
                     startCommand(chatId, update.getMessage().getChat().getFirstName());
@@ -112,20 +118,35 @@ public class TelegramBot extends TelegramLongPollingBot {
                     sendMessage(chatId, SHOES_BY_PRICE);
                     break;
                 case "/assortment":
-                    sendMessage(chatId, "Весь ассортимент: ");
+//                    sendMessage(chatId, "Весь ассортимент: ");
+                    getPhotoShoes(chatId,
+                            "https://sun9-66.userapi.com/impf/GlAYqjF9mDJygCPtySLbdK2rJgDK1BI26Es_Zw/Sienk4vRFxQ.jpg?size=810x1080&quality=95&sign=c3b28912681d0558f276762591215368&type=album",
+                            "Test 1");
+                    getPhotoShoes(chatId,
+                            "https://sun9-43.userapi.com/impf/wf8F-pNr-73Pk3zvbl823-B_AcWkcdo8ZVaZSQ/4VAheCKmrFE.jpg?size=810x1080&quality=95&sign=0979a31addd7259e286fe87360db2bdf&type=album",
+                            "Test 2");
+                    break;
+                case "/add":
+                    addPhoto(update, chatId);
                     break;
                 default:
                     registerUser(update.getMessage());
                     sendMessage(chatId, String.format(ERROR_TEXT,
                             update.getMessage().getChat().getFirstName()));
             }
-        } else if (update.hasCallbackQuery()){
+        } else if (update.hasCallbackQuery()) {
             String callbackData = update.getCallbackQuery().getData();
             long chatId = update.getCallbackQuery().getMessage().getChatId();
 
             switch (callbackData) {
                 case "assortment":
-                    sendMessage(chatId, "Ассортимент:");
+                    //sendMessage(chatId, "Ассортимент:");
+                    getPhotoShoes(chatId,
+                            "https://sun9-66.userapi.com/impf/GlAYqjF9mDJygCPtySLbdK2rJgDK1BI26Es_Zw/Sienk4vRFxQ.jpg?size=810x1080&quality=95&sign=c3b28912681d0558f276762591215368&type=album",
+                            "Test 1");
+                    getPhotoShoes(chatId,
+                            "https://sun9-43.userapi.com/impf/wf8F-pNr-73Pk3zvbl823-B_AcWkcdo8ZVaZSQ/4VAheCKmrFE.jpg?size=810x1080&quality=95&sign=0979a31addd7259e286fe87360db2bdf&type=album",
+                            "Test 2");
                     break;
                 case "assortmentBySize":
                     getSizeBoard(chatId, "Выберите требуемый размер:");
@@ -133,28 +154,29 @@ public class TelegramBot extends TelegramLongPollingBot {
                 case "assortmentByPrice":
                     sendMessage(chatId, SHOES_BY_PRICE);
                     break;
-                default: sendMessage(chatId, String.format(ERROR_TEXT,
-                        update.getCallbackQuery().getMessage().getChat().getFirstName()));
+                default:
+                    sendMessage(chatId, String.format(ERROR_TEXT,
+                            update.getCallbackQuery().getMessage().getChat().getFirstName()));
             }
         }
     }
 
     //показать данные о пользователе
     private void showData(long chatId) {
-        if (userRepository.findById(chatId).isPresent()){
+        if (userRepository.findById(chatId).isPresent()) {
             User user = findOne(chatId);
             sendMessage(chatId, "Мы храним о Вас следующие данные: \n\n" +
-                            "Ваш ChatID: " + user.getChatId() + " ;\n\n" +
-                            "Ваше имя: " + user.getFirstName() + " ;\n\n" +
-                            "Ваша фамилия: " + user.getLastName() + " ;\n\n" +
-                            "Ваше имя пользователя: " + user.getUserName() + " ;\n\n" +
-                            "Вы зарегистрировались: " + user.getRegisteredAt() + " ;\n\n" +
-                            "Если хотите удалить данные о себе, то воспользуйтесь командой /deletedata");
+                    "Ваш ChatID: " + user.getChatId() + " ;\n\n" +
+                    "Ваше имя: " + user.getFirstName() + " ;\n\n" +
+                    "Ваша фамилия: " + user.getLastName() + " ;\n\n" +
+                    "Ваше имя пользователя: " + user.getUserName() + " ;\n\n" +
+                    "Вы зарегистрировались: " + user.getRegisteredAt() + " ;\n\n" +
+                    "Если хотите удалить данные о себе, то воспользуйтесь командой /deletedata");
         }
     }
 
     //возвращает одного человека
-    public User findOne(long chatId){
+    public User findOne(long chatId) {
         Optional<User> foundPerson = userRepository.findById(chatId); //либо находит, либо нет
         return foundPerson.orElse(null);
     }
@@ -167,7 +189,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     //регистрация человека в БД
     private void registerUser(Message msg) {
 
-        if (userRepository.findById(msg.getChatId()).isEmpty()){
+        if (userRepository.findById(msg.getChatId()).isEmpty()) {
 
             var chatId = msg.getChatId();
             var chat = msg.getChat();
@@ -189,7 +211,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     //Команда при нажатии на /start
-    private void startCommand(long chatId, String name){
+    private void startCommand(long chatId, String name) {
         String answer = "Привет, " + name + ", добро пожаловать! \n\n" +
                 "Для вызова помощи введите /help \n\n" +
                 "Для просмотра ассортимента:";
@@ -203,21 +225,9 @@ public class TelegramBot extends TelegramLongPollingBot {
         sendMenuMessage(chatId, answer);
     }
 
-    //Отправка сообщения
-    private void sendMessage(long chatId, String textToSend){
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText(textToSend);
-
-        try{
-            execute(message);
-        } catch (TelegramApiException e){
-            log.error("Случилась ошибка: " + e.getMessage());
-        }
-    }
 
     //Отправка сообщения после меню старт
-    private void sendMenuMessage(long chatId, String textToSend){
+    private void sendMenuMessage(long chatId, String textToSend) {
 
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
@@ -250,16 +260,29 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         message.setReplyMarkup(inlineKeyboardMarkup);
 
-        try{
+        try {
             execute(message);
-        } catch (TelegramApiException e){
+        } catch (TelegramApiException e) {
             log.error("Случилась ошибка: " + e.getMessage());
         }
 
     }
 
+    //Отправка сообщения
+    private void sendMessage(long chatId, String textToSend) {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(textToSend);
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            log.error("Случилась ошибка: " + e.getMessage());
+        }
+    }
+
     //кнопки с размерами
-    private void getSizeBoard(long chatId, String textToSend){
+    private void getSizeBoard(long chatId, String textToSend) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(textToSend);
@@ -351,14 +374,49 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         message.setReplyMarkup(inlineKeyboardMarkup);
 
-        try{
+        try {
             execute(message);
-        } catch (TelegramApiException e){
+        } catch (TelegramApiException e) {
             log.error("Случилась ошибка: " + e.getMessage());
         }
     }
 
-    private void getGetShoesbyPrice(long chatId, String textToSend){
+    private void getPhotoShoes(long chatId, String photoPath, String caption) {
+        SendPhoto photo = new SendPhoto();
+        photo.setChatId(String.valueOf(chatId));
+        photo.setPhoto(new InputFile(photoPath));
+        photo.setCaption(caption);
 
+        try {
+            execute(photo);
+        } catch (TelegramApiException e) {
+            log.error("Случилась ошибка: " + e.getMessage());
+        }
+    }
+
+    //добавить картинку в бд
+    private void addPhoto(Update update, long chatId) {
+        Shoes shoes = new Shoes();
+        List<String> list = new ArrayList<>();
+
+        if (update.hasMessage() && update.getMessage().hasText()) {
+            while (!update.getMessage().getText().equals("Exit")) {
+                String messageText = update.getMessage().getText();
+                list.add(messageText);
+            }
+
+            shoes.setName(list.get(0));
+
+            shoes.setSize(Double.parseDouble(list.get(1)));
+
+            shoes.setPrice(Long.parseLong(list.get(2)));
+
+            shoes.setQuantity(Integer.parseInt(list.get(3)));
+
+            shoes.setReference(list.get(4));
+
+
+            shoesRepository.save(shoes);
+        }
     }
 }

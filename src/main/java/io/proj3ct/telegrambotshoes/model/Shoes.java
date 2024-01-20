@@ -30,12 +30,7 @@ public class Shoes {
     @Column(name = "quantity")
     private int quantity;
 
-    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER, mappedBy = "shoes")
-    private List<Image> images = new ArrayList<>();
-
-    public void addImageToShoes(Image image){
-        image.setShoes(this);
-        images.add(image);
-    }
+    @Column(name = "reference")
+    private String reference;
 
 }
