@@ -90,6 +90,9 @@ public class TelegramBot extends TelegramLongPollingBot {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
 
+            if(messageText.startsWith("/addData")){
+                addShoesToBD(chatId, messageText);
+            }
 
             switch (messageText) {
                 case "/start":
@@ -126,14 +129,14 @@ public class TelegramBot extends TelegramLongPollingBot {
                             "https://sun9-43.userapi.com/impf/wf8F-pNr-73Pk3zvbl823-B_AcWkcdo8ZVaZSQ/4VAheCKmrFE.jpg?size=810x1080&quality=95&sign=0979a31addd7259e286fe87360db2bdf&type=album",
                             "Test 2");
                     break;
-                case "/add":
-                    addPhoto(update, chatId);
-                    break;
+
                 default:
                     registerUser(update.getMessage());
                     sendMessage(chatId, String.format(ERROR_TEXT,
                             update.getMessage().getChat().getFirstName()));
             }
+
+
         } else if (update.hasCallbackQuery()) {
             String callbackData = update.getCallbackQuery().getData();
             long chatId = update.getCallbackQuery().getMessage().getChatId();
@@ -381,6 +384,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
+    //получить фотку кроссовок
     private void getPhotoShoes(long chatId, String photoPath, String caption) {
         SendPhoto photo = new SendPhoto();
         photo.setChatId(String.valueOf(chatId));
@@ -395,28 +399,23 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     //добавить картинку в бд
-    private void addPhoto(Update update, long chatId) {
+    private void addShoesToBD(long chatId, String messageText) {
         Shoes shoes = new Shoes();
-        List<String> list = new ArrayList<>();
 
-        if (update.hasMessage() && update.getMessage().hasText()) {
-            while (!update.getMessage().getText().equals("Exit")) {
-                String messageText = update.getMessage().getText();
-                list.add(messageText);
-            }
+        String[] str = messageText.split(" ");
 
-            shoes.setName(list.get(0));
 
-            shoes.setSize(Double.parseDouble(list.get(1)));
+            shoes.setName(str[1]);
 
-            shoes.setPrice(Long.parseLong(list.get(2)));
+            shoes.setSize(Double.parseDouble(str[2]));
 
-            shoes.setQuantity(Integer.parseInt(list.get(3)));
+            shoes.setPrice(Long.parseLong(str[3]));
 
-            shoes.setReference(list.get(4));
+            shoes.setQuantity(Integer.parseInt(str[4]));
+
+            shoes.setReference(str[5]);
 
 
             shoesRepository.save(shoes);
-        }
     }
 }
