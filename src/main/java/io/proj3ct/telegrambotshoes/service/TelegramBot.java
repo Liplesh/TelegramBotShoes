@@ -398,7 +398,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    //добавить картинку в бд
+    //добавить картинку
     private void addShoesToBD(long chatId, String messageText) {
         Shoes shoes = new Shoes();
 
