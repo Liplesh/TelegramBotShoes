@@ -27,10 +27,10 @@ public class Shoes {
     @Column(name = "price")
     private Long price;
 
-    @Column(name = "quantity")
-    private int quantity;
-
     @Column(name = "reference")
     private String reference;
+
+    @Column(name = "quantity")
+    private int quantity;
 
 }

@@ -7,6 +7,7 @@ import io.proj3ct.telegrambotshoes.repositories.ShoesRepository;
 import io.proj3ct.telegrambotshoes.repositories.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
@@ -29,8 +30,10 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
     private ShoesRepository shoesRepository;
-    final BotConfig botConfig;
+    private final BotConfig botConfig;
 
     static final String HELP_TEXT = "Вас приветствует лучший продавец кроссовок в России Прокофий Ласкин.\n\n" +
             "Этот бот предназначен для демонстрации ассортимента кроссовок. \n\n" +
@@ -48,8 +51,14 @@ public class TelegramBot extends TelegramLongPollingBot {
     static final String NOTPERSON_TEXT = "У нас нет информации о Вас";
     static final String SHOES_BY_PRICE = "Введите максимальную стоимость пары: \n\n" +
             "Формат ввода: \n" +
-            "10000 - если максимальная стоимость 10 тыс. рублей; \n\n" +
-            "10500 - если максимальная стоимость 10,5 тыс. рублей; \n\n";
+            "\"Цена%10000\" - если максимальная стоимость 10 тыс. рублей; \n\n" +
+            "\"Цена%10500\" - если максимальная стоимость 10,5 тыс. рублей; \n\n" +
+            "Запрос вводить без ковычек. Пример: \n" +
+            "Цена%13500";
+
+    @Value("${password}")
+    private String password;
+
 
 
     @Autowired
@@ -90,11 +99,12 @@ public class TelegramBot extends TelegramLongPollingBot {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
 
-            if(messageText.startsWith("/addData")){
-                addShoesToBD(chatId, messageText);
-            }
+            String[] commandArray = messageText.split("%");
 
-            switch (messageText) {
+            switch (commandArray[0]) {
+                case "/addData":
+                    addShoesToBD(chatId, messageText);
+                    break;
                 case "/start":
                     registerUser(update.getMessage());
                     startCommand(chatId, update.getMessage().getChat().getFirstName());
@@ -121,15 +131,23 @@ public class TelegramBot extends TelegramLongPollingBot {
                     sendMessage(chatId, SHOES_BY_PRICE);
                     break;
                 case "/assortment":
-//                    sendMessage(chatId, "Весь ассортимент: ");
-                    getPhotoShoes(chatId,
-                            "https://sun9-66.userapi.com/impf/GlAYqjF9mDJygCPtySLbdK2rJgDK1BI26Es_Zw/Sienk4vRFxQ.jpg?size=810x1080&quality=95&sign=c3b28912681d0558f276762591215368&type=album",
-                            "Test 1");
-                    getPhotoShoes(chatId,
-                            "https://sun9-43.userapi.com/impf/wf8F-pNr-73Pk3zvbl823-B_AcWkcdo8ZVaZSQ/4VAheCKmrFE.jpg?size=810x1080&quality=95&sign=0979a31addd7259e286fe87360db2bdf&type=album",
-                            "Test 2");
+                    showAllAssortment(chatId);
                     break;
-
+                case "Цена":
+                    showAllAssortmentByPrice(chatId, Long.parseLong(commandArray[1]));
+                    break;
+                case "/showAllBD":
+                    showAllFromDB(chatId, messageText);
+                    break;
+                case "/changePrice":
+                    changePrice(chatId, messageText);
+                    break;
+                case "/changeQuantity":
+                    changeQuantity(chatId, messageText);
+                    break;
+                case "/removeFromBD":
+                    remove(chatId, messageText);
+                    break;
                 default:
                     registerUser(update.getMessage());
                     sendMessage(chatId, String.format(ERROR_TEXT,
@@ -141,15 +159,11 @@ public class TelegramBot extends TelegramLongPollingBot {
             String callbackData = update.getCallbackQuery().getData();
             long chatId = update.getCallbackQuery().getMessage().getChatId();
 
-            switch (callbackData) {
+            String[] commandArray = callbackData.split(" ");
+
+            switch (commandArray[0]) {
                 case "assortment":
-                    //sendMessage(chatId, "Ассортимент:");
-                    getPhotoShoes(chatId,
-                            "https://sun9-66.userapi.com/impf/GlAYqjF9mDJygCPtySLbdK2rJgDK1BI26Es_Zw/Sienk4vRFxQ.jpg?size=810x1080&quality=95&sign=c3b28912681d0558f276762591215368&type=album",
-                            "Test 1");
-                    getPhotoShoes(chatId,
-                            "https://sun9-43.userapi.com/impf/wf8F-pNr-73Pk3zvbl823-B_AcWkcdo8ZVaZSQ/4VAheCKmrFE.jpg?size=810x1080&quality=95&sign=0979a31addd7259e286fe87360db2bdf&type=album",
-                            "Test 2");
+                    showAllAssortment(chatId);
                     break;
                 case "assortmentBySize":
                     getSizeBoard(chatId, "Выберите требуемый размер:");
@@ -157,9 +171,8 @@ public class TelegramBot extends TelegramLongPollingBot {
                 case "assortmentByPrice":
                     sendMessage(chatId, SHOES_BY_PRICE);
                     break;
-                default:
-                    sendMessage(chatId, String.format(ERROR_TEXT,
-                            update.getCallbackQuery().getMessage().getChat().getFirstName()));
+                case "size":
+                    showAllAssortmentBySize(chatId, Double.parseDouble(commandArray[1]));
             }
         }
     }
@@ -219,8 +232,6 @@ public class TelegramBot extends TelegramLongPollingBot {
                 "Для вызова помощи введите /help \n\n" +
                 "Для просмотра ассортимента:";
 
-        //Поддержка смайликов
-        //String answer = EmojiParser.parseToUnicode("Привет, " + name + ", добро пожаловать!" + ":yum:");
 
         //добавим запись о том, что ответили пользователю
         log.info("Ответили пользователю " + name);
@@ -229,7 +240,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
 
-    //Отправка сообщения после меню старт
+    //Кнопки после старт
     private void sendMenuMessage(long chatId, String textToSend) {
 
         SendMessage message = new SendMessage();
@@ -243,15 +254,15 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         var assortimentButton = new InlineKeyboardButton();
         assortimentButton.setText("Весь ассортимент");
-        assortimentButton.setCallbackData("assortment");
+        assortimentButton.setCallbackData("assortment х");
 
         var assortmentBySizeButton = new InlineKeyboardButton();
         assortmentBySizeButton.setText("Найти по размеру");
-        assortmentBySizeButton.setCallbackData("assortmentBySize");
+        assortmentBySizeButton.setCallbackData("assortmentBySize х");
 
         var assortmentByPriceButton = new InlineKeyboardButton();
         assortmentByPriceButton.setText("Найти по цене");
-        assortmentByPriceButton.setCallbackData("assortmentByPrice");
+        assortmentByPriceButton.setCallbackData("assortmentByPrice х");
 
         rowInLine.add(assortimentButton);
         rowInLine.add(assortmentBySizeButton);
@@ -299,76 +310,76 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         var size5_5 = new InlineKeyboardButton();
         size5_5.setText("5.5 UK");
-        size5_5.setCallbackData("5.5");
+        size5_5.setCallbackData("size 5.5");
 
         var size6 = new InlineKeyboardButton();
         size6.setText("6 UK");
-        size6.setCallbackData("6.0");
+        size6.setCallbackData("size 6.0");
 
         var size6_5 = new InlineKeyboardButton();
         size6_5.setText("6.5 UK");
-        size6_5.setCallbackData("6.5");
+        size6_5.setCallbackData("size 6.5");
 
         var size7 = new InlineKeyboardButton();
         size7.setText("7 UK");
-        size7.setCallbackData("7.0");
+        size7.setCallbackData("size 7.0");
 
         Collections.addAll(rowInLine1, size5_5, size6, size6_5, size7);
         rowsInLine.add(rowInLine1);
 
         var size7_5 = new InlineKeyboardButton();
         size7_5.setText("7.5 UK");
-        size7_5.setCallbackData("7.5");
+        size7_5.setCallbackData("size 7.5");
 
         var size8 = new InlineKeyboardButton();
         size8.setText("8 UK");
-        size8.setCallbackData("8");
+        size8.setCallbackData("size 8");
 
         var size8_5 = new InlineKeyboardButton();
         size8_5.setText("8.5 UK");
-        size8_5.setCallbackData("8.5");
+        size8_5.setCallbackData("size 8.5");
 
         var size9 = new InlineKeyboardButton();
         size9.setText("9 UK");
-        size9.setCallbackData("9.0");
+        size9.setCallbackData("size 9.0");
 
         Collections.addAll(rowInLine2, size7_5, size8, size8_5, size9);
         rowsInLine.add(rowInLine2);
 
         var size9_5 = new InlineKeyboardButton();
         size9_5.setText("9.5 UK");
-        size9_5.setCallbackData("9.5");
+        size9_5.setCallbackData("size 9.5");
 
         var size10 = new InlineKeyboardButton();
         size10.setText("10 UK");
-        size10.setCallbackData("10.0");
+        size10.setCallbackData("size 10.0");
 
         var size10_5 = new InlineKeyboardButton();
         size10_5.setText("10.5 UK");
-        size10_5.setCallbackData("10.5");
+        size10_5.setCallbackData("size 10.5");
 
         var size11 = new InlineKeyboardButton();
         size11.setText("11 UK");
-        size11.setCallbackData("11.0");
+        size11.setCallbackData("size 11.0");
 
         Collections.addAll(rowInLine3, size9_5, size10, size10_5, size11);
         rowsInLine.add(rowInLine3);
 
         var size11_5 = new InlineKeyboardButton();
         size11_5.setText("11.5 UK");
-        size11_5.setCallbackData("11.5");
+        size11_5.setCallbackData("size 11.5");
 
         var size12 = new InlineKeyboardButton();
         size12.setText("12 UK");
-        size12.setCallbackData("12.0");
+        size12.setCallbackData("size 12.0");
 
         var size12_5 = new InlineKeyboardButton();
         size12_5.setText("12.5 UK");
-        size12_5.setCallbackData("12.5");
+        size12_5.setCallbackData("size 12.5");
 
         var size13 = new InlineKeyboardButton();
         size13.setText("13 UK");
-        size13.setCallbackData("13.0");
+        size13.setCallbackData("size 13.0");
 
         Collections.addAll(rowInLine4, size11_5, size12, size12_5, size13);
         rowsInLine.add(rowInLine4);
@@ -398,24 +409,136 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
+
+    public void shoesList(List<Shoes> shoesList, Long chatId){
+        for(Shoes shoes : shoesList) {
+            String message = shoes.getName() + "\n" +
+                    "Размер: " + shoes.getSize() + "\n" +
+                    "Цена: " + shoes.getPrice();
+            getPhotoShoes(chatId, shoes.getReference(), message);
+
+        }
+    }
+    public void showAllAssortment(Long chatId){
+        List<Shoes> shoesList = shoesRepository.findAll();
+        shoesList(shoesList, chatId);
+    }
+
+    public void showAllAssortmentBySize(Long chatId, double size){
+        List<Shoes> shoesList = shoesRepository.findAllBySizeAndQuantityAfter(size, 0);
+        if (!shoesList.isEmpty())
+        shoesList(shoesList, chatId);
+        else sendMessage(chatId,"В наличии нет модели размера " + size + " UK");
+    }
+
+    public void showAllAssortmentByPrice(Long chatId, long price){
+        List<Shoes> shoesList = shoesRepository.findAllByPriceIsBeforeAndQuantityAfter(price, 0);
+        List<Shoes> shoesList2 = shoesRepository.findAllByPriceIsAndQuantityAfter(price, 0);
+        shoesList.addAll(shoesList2);
+
+        if (!shoesList.isEmpty())
+            shoesList(shoesList, chatId);
+        else sendMessage(chatId,"В наличии нет модели дешевле " + price);
+    }
+
+    /*
+    Базы данных
+    */
+
     //добавить картинку
-    private void addShoesToBD(long chatId, String messageText) {
+    public void addShoesToBD(Long chatId, String messageText) {
         Shoes shoes = new Shoes();
 
-        String[] str = messageText.split(" ");
+        String[] str = messageText.split("%");
 
+        if (str[1].equals(this.password)) {
 
-            shoes.setName(str[1]);
+            shoes.setName(str[2]);
 
-            shoes.setSize(Double.parseDouble(str[2]));
+            shoes.setSize(Double.parseDouble(str[3]));
 
-            shoes.setPrice(Long.parseLong(str[3]));
+            shoes.setPrice(Long.parseLong(str[4]));
 
-            shoes.setQuantity(Integer.parseInt(str[4]));
+            shoes.setQuantity(Integer.parseInt(str[5]));
 
-            shoes.setReference(str[5]);
-
+            shoes.setReference(str[6]);
 
             shoesRepository.save(shoes);
+
+            sendMessage(chatId, "Insertion completed");
+        } else sendMessage(chatId, "You don't have permission");
+    }
+
+    //Показать все, что есть в бд
+    public void showAllFromDB(Long chatId, String messageText){
+
+        String[] str = messageText.split("%");
+
+        if (str[1].equals(this.password)) {
+            List<Shoes> allShoes = shoesRepository.findAll();
+            for (Shoes shoes : allShoes) {
+                sendMessage(chatId,
+                        "id: " + shoes.getShoesId() + " | " +
+                                shoes.getName() + "\n" +
+                                "Размер: " + shoes.getSize() + " | " +
+                                "Цена: " + shoes.getPrice() + " | " +
+                                "Кол-во: " + shoes.getQuantity() + "\n\n"
+                );
+            }
+        } else sendMessage(chatId, "You don't have permission");
+    }
+
+    //Вернуть одну пару кроссовок
+    public Shoes findOne(Long shoesId) {
+        Optional<Shoes> foundShoes = shoesRepository.findById(shoesId);
+        return foundShoes.orElse(null);
+    }
+
+    //Изменить цену
+    public void changePrice(Long chatId,  String messageText){
+
+        String[] str = messageText.split("%");
+
+        if (str[1].equals(this.password)) {
+
+            Long shoesId = Long.parseLong(str[2]);
+            Long price = Long.parseLong(str[3]);
+
+            Shoes shoes = findOne(shoesId);
+            if (shoes != null) {
+                shoes.setPrice(price);
+                shoesRepository.save(shoes);
+                sendMessage(chatId, "Price is changed");
+            } else sendMessage(chatId, "This element is not in the database");
+        } else sendMessage(chatId, "You don't have permission");
+    }
+
+    //Изменить кол-во
+    public void changeQuantity(Long chatId,  String messageText){
+
+        String[] str = messageText.split("%");
+
+        if (str[1].equals(this.password)) {
+
+            Long shoesId = Long.parseLong(str[2]);
+            int quantity = Integer.parseInt(str[3]);
+
+            Shoes shoes = findOne(shoesId);
+            if (shoes != null) {
+                shoes.setQuantity(quantity);
+                shoesRepository.save(shoes);
+                sendMessage(chatId, "Quantity is changed");
+            } else sendMessage(chatId, "This element is not in the database");
+        } else sendMessage(chatId, "You don't have permission");
+    }
+
+    //Удалить из БД
+    public void remove(Long chatId, String messageText){
+        String[] str = messageText.split("%");
+        if (str[1].equals(this.password)) {
+            Long shoesId = Long.parseLong(str[2]);
+            shoesRepository.deleteById(shoesId);
+            sendMessage(chatId, "Shoes removed");
+        } else sendMessage(chatId, "You don't have permission");
     }
 }
